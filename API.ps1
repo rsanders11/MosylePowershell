@@ -24,6 +24,9 @@
     Possible Issues:
     May run into problems when 51 devices are added as there may be paging, not sure how the API will react to this. 
 
+    Type may not be loaded.  May need to run command below to add System.Web or it can be added the $PROFILE
+    Add-Type -AssemblyName System.Web
+
 #>
 
 

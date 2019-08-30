@@ -17,6 +17,13 @@
     GetDevices(): Return all devices
     GetDevices($employeeCode): Return Devices where asset tags match employee code
 
+    Todo:
+    * User lists
+    * Serial Search
+
+    Possible Issues:
+    May run into problems when 51 devices are added as there may be paging, not sure how the API will react to this. 
+
 #>
 
 
@@ -55,7 +62,6 @@ class MosyleApi {
             "accesstoken"=$token;
             "Authorization"="Basic $hash"
         }
-        Write-Host $hash
     }
 
     [object]GetDevices(){

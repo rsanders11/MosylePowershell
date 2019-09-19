@@ -59,6 +59,7 @@ class MosyleApi {
         $hash = "$($username):$($password)"
         $hash = [System.Text.Encoding]::UTF8.GetBytes($hash)
         $hash = [Convert]::ToBase64String($hash)
+        Write-Host $hash
 
         $this.headers = @{
             "Content-Type"="application/x-www-form-encoded";
@@ -68,9 +69,10 @@ class MosyleApi {
     }
 
     [object]GetDevices(){
-        $query = $this.BuildQuery("ios")
+        $buildResult = $this.BuildQuery("ios")
+        $query = $buildResult.queryString
         #$query.add('options[specific_columns]', "device_name,asset_tag,serial_number")
-        $url = "$($this.uri)/devices"
+        $url = $buildResult.url
         $response = $this.ExecuteWebRequest($url, $query)
         $this.deviceList = $response.devices
         return $response.devices
@@ -84,24 +86,53 @@ class MosyleApi {
         return $this.deviceList | ? asset_tag -eq $employeeCode
     }
 
+    [Object]GetUsers(){
+        #response will come back with a users,rows,page, and page_size property 
 
+        
+        $buildResult = $this.BuildQuery("list_users")
+        <#
+        $response = $this.ExecuteWebRequest($buildresult.url, $buildresult.queryString)
+        #>
+        $response = $this.ExecuteAndHandlePaging($buildResult)
+        return $response
+    }
 
-
-    [System.Object]BuildQuery($os){
+    [System.Object]BuildQuery($type){
         #Builds the basic query for specificed OS
-        if($os -eq "ios"){
-            $queryString = [System.Web.HttpUtility]::ParseQueryString([string]::Empty)
-            $queryString.Add('operation', 'list')
-            $queryString.add('options[os]', 'ios')
-        }else{
-            $queryString = [System.Web.HttpUtility]::ParseQueryString([string]::Empty)
+        $queryString = [System.Web.HttpUtility]::ParseQueryString([string]::Empty)
+        $url = $this.uri
+        $jsonObject = $null
+        switch ($type) {
+            "ios" { 
+                $queryString.Add('operation', 'list')
+                $queryString.add('options[os]', 'ios')
+                $url = "$($url)/devices"
+                $jsonObject = "devices"
+             }
+             "list_users" {
+                $queryString.Add('operation', 'list_users')
+                $url = "$($url)/users"
+                $jsonObject = "users"
+             }
+             "update_user" {
+                $queryString.Add('operation', 'update_user')
+                $url = "$($url)/users"
+                $jsonObject = "users"
+             }
+            Default {}
         }
-        return $queryString
+        return [PSCustomObject]@{
+            queryString = $queryString
+            url = $url
+            jsonObject = $jsonObject
+        }
     }
 
 
     [Object]ExecuteWebRequest($url, $query){
-        Write-Host $query.ToString()
+        Write-Host $url.ToString()
+        Write-Host $query
         $response = Invoke-WebRequest -Uri $url -Headers $this.headers -body $query.ToString() -Method Post -ContentType "application/x-www-form-urlencoded"
         $response = ConvertFrom-Json -InputObject $response
         return $response.response
@@ -111,4 +142,47 @@ class MosyleApi {
     SetToken($token){
         $this.token = $token
     }
+
+    [Object]ExecuteAndHandlePaging($buildResult){
+        #Push all pages together into one large object.  May not work out well for large datasets but will work for our current and near future device and user count
+    
+        <#
+            Expected input: 
+                * JSON object returned from API request.  Rows, page, and page_size should be exposed
+                * Build Result.  An object containing the query that is editable and the url for the request to be made
+            
+            Requirements:
+                *Access to ExecuteWebRequest method
+    
+            Process:
+                * Pull new data for all available pages, add to $returnobject
+        #>
+        $response = $this.ExecuteWebRequest($buildresult.url, $buildresult.queryString)
+        $returnObj = $response."$($buildResult.jsonObject)"
+        
+        $rows = $response.rows
+        $pagesize = $response.page_size
+        if($rows -lt $pagesize){
+            #no need to handle paging.  Less rows than in a page. 
+            return $returnObj
+        }
+    
+        [int]$totalPages = [Math]::Ceiling($rows / $pagesize)
+
+        for($i = 2; $i -le $totalPages; $i++){
+            Write-Host "Page: $($i) / $($totalPages)"
+            $buildresult.queryString.Add("options[page]", $i);
+            $response = $this.ExecuteWebRequest($buildresult.url, $buildresult.queryString)
+
+            $returnObj += $response."$($buildresult.jsonObject)"
+        }
+    
+        return $returnObj
+    }
 }
+
+
+
+
+$api = [MosyleApi]::new("da540296515d1a42c88c")
+$api.GetUsers() | ConvertTo-Csv | Out-File "test.csv"

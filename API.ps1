@@ -16,13 +16,14 @@
 
     GetDevices(): Return all devices
     GetDevices($employeeCode): Return Devices where asset tags match employee code
-
+    GetUsers(): Returns all users.  If synced with AD, google, Azure this may return many pages. 
     Todo:
     * User lists
     * Serial Search
 
     Possible Issues:
     May run into problems when 51 devices are added as there may be paging, not sure how the API will react to this. 
+        -Paging has been added.  May need to watch this to be sure it is working as expected
 
     Type may not be loaded.  May need to run command below to add System.Web or it can be added the $PROFILE
     Add-Type -AssemblyName System.Web
@@ -69,13 +70,19 @@ class MosyleApi {
     }
 
     [object]GetDevices(){
+        if($null -ne $this.deviceList){
+            return $this.deviceList
+        }
+
         $buildResult = $this.BuildQuery("ios")
+        <#
         $query = $buildResult.queryString
         #$query.add('options[specific_columns]', "device_name,asset_tag,serial_number")
         $url = $buildResult.url
-        $response = $this.ExecuteWebRequest($url, $query)
-        $this.deviceList = $response.devices
-        return $response.devices
+        #>
+        $response = $this.ExecuteAndHandlePaging($buildResult)
+        $this.deviceList = $response
+        return $response
     }
 
     [Object]GetDevices($employeeCode){
@@ -182,7 +189,3 @@ class MosyleApi {
 }
 
 
-
-
-$api = [MosyleApi]::new("da540296515d1a42c88c")
-$api.GetUsers() | ConvertTo-Csv | Out-File "test.csv"
